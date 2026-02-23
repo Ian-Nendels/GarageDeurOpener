@@ -1,7 +1,7 @@
 import uasyncio as asyncio
 import network
 from time import sleep
-from WIFI_CONFIG import NetWorkConfig
+from CONFIG import NetWorkConfig
 
 class Network():
     wlan = network.WLAN()
