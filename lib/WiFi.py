@@ -26,6 +26,7 @@ async def Connect_Wifi():
 async def initialize_wifi(ssid, password):
     Network.wlan = network.WLAN(network.STA_IF)
     Network.wlan.active(True)
+    Network.wlan.config(pm = 0xa11140) # Disable power-save mode
 
     # Connect to the network
     Network.wlan.connect(ssid, password)
@@ -33,14 +34,14 @@ async def initialize_wifi(ssid, password):
     # Wait for Wi-Fi connection
     connection_timeout = 10
     while connection_timeout > 0:
-        if Network.wlan.status() >= 3:
+        if Network.wlan.status() < 0 or Network.wlan.status() >= 3:
             break
         connection_timeout -= 1
         print('Waiting for Wi-Fi connection...')
         await asyncio.sleep(1)
 
     # Check if connection is successful
-    if Network.wlan.status() != 3:
+    if not Network.wlan.isconnected():
         return False
     else:
         print('Connection successful!')
