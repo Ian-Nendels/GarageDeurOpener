@@ -93,52 +93,70 @@ def my_callback(topic, message):
 
 async def connect_mqtt(client):
     while True:
-        while mqttServer.isConnected:
-            await asyncio.sleep(0.1)
-        if Network.wlan.isconnected():
-            print("Connect to MQTT Server")
-            logger.info('LOCAL4:Connect to MQTT Server')
-            res = client.connect()
-            mqttServer.Subscribe = True
-            mqttServer.SubscribeWD = True
-        await asyncio.sleep(1)
+        try:
+            while mqttServer.isConnected:
+                await asyncio.sleep(0.1)
+            if Network.wlan.isconnected():
+                print("Connect to MQTT Server")
+                logger.info('LOCAL4:Connect to MQTT Server')
+                res = client.connect()
+                mqttServer.Subscribe = True
+                mqttServer.SubscribeWD = True
+            await asyncio.sleep(1)
+        except Exception as e:
+            msg = "connect_mqtt loop error: {str(e)}"
+            logger.error('LOCAL4:' + msg)
+            await asyncio.sleep(1)
 
 async def ping_mqtt(client):
     while True:
-        if ping.FirstRun:
-            ping.response = False
-        if (ping.counter > 0):
-            interval = 5
-            msg = "ping interval op 5 sec, ping counter = " + str(ping.counter)
-            logger.warn('LOCAL4:' + msg)
-        else:
-            interval = config.MQTT_PING_INTERVAL
-        if Network.wlan.isconnected():
+        try:
             if ping.FirstRun:
-                #print("Sending Ping Request")
-                client.ping()
-                ping.started = True
-                ping.counter += 1
+                ping.response = False
+            if (ping.counter > 0):
+                interval = 5
+                msg = "ping interval op 5 sec, ping counter = " + str(ping.counter)
+                logger.warn('LOCAL4:' + msg)
             else:
-                ping.FirstRun = True
-                ping.response = True
-        await asyncio.sleep(interval)
+                interval = config.MQTT_PING_INTERVAL
+            if Network.wlan.isconnected():
+                if ping.FirstRun:
+                    #print("Sending Ping Request")
+                    client.ping()
+                    ping.started = True
+                    ping.counter += 1
+                else:
+                    ping.FirstRun = True
+                    ping.response = True
+            await asyncio.sleep(interval)
+        except Exception as e:
+            msg = "ping_mqtt loop error: {str(e)}"
+            logger.error('LOCAL4:' + msg)
+            await asyncio.sleep(2)
+
 
 async def check_mqtt_msg(client):
     while True:
-        if Network.wlan.isconnected() and mqttServer.isConnected:
-            msg = client.check_msg()
-            if(msg == b"PINGRESP"):
-                ping.counter = 0
-                ping.response = True
-                #print("Ping Responce Recieved")
-            if ping.started:
-                ping.started = False
-                if (ping.counter > 5):
-                    mqttServer.isConnected = False
-                    logger.warn('LOCAL4:5x geen ping response, mqttServer disconnected')
-        await asyncio.sleep(0.1)
+        try:
+            if Network.wlan.isconnected() and mqttServer.isConnected:
+                msg = client.check_msg()
+                if(msg == b"PINGRESP"):
+                    ping.counter = 0
+                    ping.response = True
+                    #print("Ping Responce Recieved")
+                if ping.started:
+                    ping.started = False
+                    if (ping.counter > 5):
+                        mqttServer.isConnected = False
+                        logger.warn('LOCAL4:5x geen ping response, mqttServer disconnected')
+            await asyncio.sleep(0.1)
+        except Exception as e:
+            msg = "check_mqtt_msg loop error: {str(e)}"
+            logger.error('LOCAL4:' + msg)
+            await asyncio.sleep(2)
 
+
+        
 #CoRoutine: Waiting for RemoteButton coming from mqtt
 async def RemoteButtonPress():
     while True:

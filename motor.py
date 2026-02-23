@@ -1,8 +1,9 @@
 import machine
 import uasyncio as asyncio
+from lib import usyslog
 import mqtt
 
-#logger = usyslog.UDPClient(ip=mqtt.config.SYSLOG_SERVER_IP, facility=usyslog.F_LOCAL4)
+logger = usyslog.UDPClient(ip=mqtt.config.SYSLOG_SERVER_IP, facility=usyslog.F_LOCAL4)
 
 encoderA = machine.Pin(4 , machine.Pin.IN)
 encoderB = machine.Pin(5 , machine.Pin.IN)
@@ -38,31 +39,41 @@ async def Encoder():
 async def MotorDirection(client, Topic):
     lasttime = True
     while True:
-        while Garagedeur.VorigePositie == Garagedeur.Positie and lasttime:
-            await asyncio.sleep(0.1)
+        try:
+            while Garagedeur.VorigePositie == Garagedeur.Positie and lasttime:
+                await asyncio.sleep(0.1)
             
-        lasttime = False  
-        if Garagedeur.Positie > Garagedeur.VorigePositie:
-            Garagedeur.Richting = 'omhoog'
-        elif Garagedeur.Positie < Garagedeur.VorigePositie:
-            Garagedeur.Richting = 'omlaag'
-        else:
-            Garagedeur.Richting = 'stil'
+            lasttime = False  
+            if Garagedeur.Positie > Garagedeur.VorigePositie:
+                Garagedeur.Richting = 'omhoog'
+            elif Garagedeur.Positie < Garagedeur.VorigePositie:
+                Garagedeur.Richting = 'omlaag'
+            else:
+                Garagedeur.Richting = 'stil'
             
-        msg = mqtt.CreateDomoticzValue(1956, ScaleOpening(Garagedeur.Positie))
-        client.publish(Topic, msg)
-        if Garagedeur.VorigePositie == Garagedeur.Positie:
-            lasttime = True
+            msg = mqtt.CreateDomoticzValue(1956, ScaleOpening(Garagedeur.Positie))
+            client.publish(Topic, msg)
+            if Garagedeur.VorigePositie == Garagedeur.Positie:
+                lasttime = True
             
-        Garagedeur.VorigePositie = Garagedeur.Positie
-        await asyncio.sleep(1)
+            Garagedeur.VorigePositie = Garagedeur.Positie
+            await asyncio.sleep(1)
+        except Exception as e:
+            msg = "MotorDirection loop error: {str(e)}"
+            logger.error('LOCAL4:' + msg)
+            await asyncio.sleep(1)
+
 
 # Send periodic the doorposition to Domoticz
 async def UpdatePosition(client, Topic):
     while True:
-        await asyncio.sleep(300)
-        msg = mqtt.CreateDomoticzValue(1956, ScaleOpening(Garagedeur.Positie))
-        client.publish(Topic, msg)
+        try:
+            await asyncio.sleep(300)
+            msg = mqtt.CreateDomoticzValue(1956, ScaleOpening(Garagedeur.Positie))
+            client.publish(Topic, msg)
+        except Exception as e:
+            msg = "UpdatePosition loop error: {str(e)}"
+            logger.error('LOCAL4:' + msg)
 
 
 async def OmDraaien(logger):

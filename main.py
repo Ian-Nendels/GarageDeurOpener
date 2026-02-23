@@ -1,17 +1,16 @@
 import machine
 import uasyncio as asyncio
 import time
-import usyslog
-#from sim import MotorData
+from lib import usyslog
 from lib import queue
 from lib import WiFi
 from lib.WiFi import Network
 from lib.simple import MQTTClient
+from lib.ota import OTAUpdater
 import mqtt
 from mqtt import config, WatchDogData, ping, mqttServer, RemoteButtonPress
 from motor import Garagedeur, UpdatePosition, MotorDirection, OmDraaien, Encoder
 import ntp
-
 
 TimeArray = [ 2025, 1, 1, 0, 0, 0, 0, 0 ] 
 # I/O punten Pico W
@@ -49,30 +48,34 @@ async def blink():
 #CoRoutine: Watchdog with Domoticz
 async def WatchDog():
     while True:
-        await asyncio.sleep(60)
-        if WatchDogData.Read == WatchDogData.Send:
-            if WatchDogData.FaultCounter > 0:
-                msg = "Watchdog weer OKE"
-                logger.info('LOCAL4:' + msg)
-                WatchDogData.FaultCounter = 0
+        try:
+            await asyncio.sleep(60)
+            if WatchDogData.Read == WatchDogData.Send:
+                if WatchDogData.FaultCounter > 0:
+                    msg = "Watchdog weer OKE"
+                    logger.info('LOCAL4:' + msg)
+                    WatchDogData.FaultCounter = 0
                 
-            WatchDogData.Send = WatchDogData.Read + 1
-            msg = mqtt.CreateDomoticzValue(1955, WatchDogData.Send)
-            client.publish(mqtt.MQTT_TOPIC_IN, msg)
-            #print("Publish: ", msg)
-        else:
-            WatchDogData.FaultCounter = WatchDogData.FaultCounter + 1
-            msg = "Watchdog Fault Counter = " + str(WatchDogData.FaultCounter)
-            print(msg)
-            logger.info('LOCAL4:' + msg)
-            msg = mqtt.CreateDomoticzValue(1955, WatchDogData.Send)
-            client.publish(mqtt.MQTT_TOPIC_IN, msg)
-        if WatchDogData.FaultCounter > 4:
-            logger.info('LOCAL4:Reboot door WatchDog error')
-            await asyncio.sleep(1)
-            machine.reset()
+                WatchDogData.Send = WatchDogData.Read + 1
+                msg = mqtt.CreateDomoticzValue(1955, WatchDogData.Send)
+                client.publish(mqtt.MQTT_TOPIC_IN, msg)
+            else:
+                WatchDogData.FaultCounter = WatchDogData.FaultCounter + 1
+                msg = "Watchdog Fault Counter = " + str(WatchDogData.FaultCounter)
+                print(msg)
+                logger.info('LOCAL4:' + msg)
+                msg = mqtt.CreateDomoticzValue(1955, WatchDogData.Send)
+                client.publish(mqtt.MQTT_TOPIC_IN, msg)
+            if WatchDogData.FaultCounter > 4:
+                logger.info('LOCAL4:Reboot door WatchDog error')
+                await asyncio.sleep(1)
+                machine.reset()
         
-        #print("Read: ", WatchDogData.Read, " Send: ", WatchDogData.Send)
+            #print("Read: ", WatchDogData.Read, " Send: ", WatchDogData.Send)
+        except Exception as e:
+            msg = "WatchDog loop error: {str(e)}"
+            logger.error('LOCAL4:' + msg)
+            await asyncio.sleep(1)
         
 #CoRoutine: Waiting for Button 
 async def ButtonPress():
@@ -89,24 +92,29 @@ async def ButtonPress():
 #coroutine: Waiting for DeurSensor
 async def DeurSensorChange():
     while True:
-        while ((Garagedeur.DichtSensor == deursensor.value()) or StartUp):
-            await asyncio.sleep(0.05)
-        Garagedeur.DichtSensor = deursensor.value()
+        try:
+            while ((Garagedeur.DichtSensor == deursensor.value()) or StartUp):
+                await asyncio.sleep(0.05)
+            Garagedeur.DichtSensor = deursensor.value()
                 
-        logmsg = "GarageDeur dicht = " + str(Garagedeur.DichtSensor)
-        print(logmsg)
-        logger.info('LOCAL4:' + logmsg)
-        if Garagedeur.DichtSensor:
-            msg = mqtt.CreateDomoticzString(1742, 1)
+            logmsg = "GarageDeur dicht = " + str(Garagedeur.DichtSensor)
+            print(logmsg)
+            logger.info('LOCAL4:' + logmsg)
+            if Garagedeur.DichtSensor:
+                msg = mqtt.CreateDomoticzString(1742, 1)
+                await asyncio.sleep(1)
+            else:
+                msg = mqtt.CreateDomoticzString(1742, 0)
+                while Garagedeur.Richting != 'stil':
+                    await asyncio.sleep(0.1)
+                Garagedeur.Positie = 0
+            client.publish(mqtt.MQTT_TOPIC_IN, msg)
+            print("Publish: ", msg)
             await asyncio.sleep(1)
-        else:
-            msg = mqtt.CreateDomoticzString(1742, 0)
-            while Garagedeur.Richting != 'stil':
-                await asyncio.sleep(0.1)
-            Garagedeur.Positie = 0
-        client.publish(mqtt.MQTT_TOPIC_IN, msg)
-        print("Publish: ", msg)
-        await asyncio.sleep(1)
+        except Exception as e:
+            msg = "DeurSensorChange loop error: {str(e)}"
+            logger.error('LOCAL4:' + msg)
+            await asyncio.sleep(1)
         
 async def StartHormann():
     while True:
@@ -140,9 +148,14 @@ async def main():
     print('Lokale tijd = ' + LocalTime)
     logger.info('LOCAL4:Lokale tijd = ' + LocalTime)
    
-    
-    # Start CoRoutine BLINK LED as a task and immediatly return
-    #asyncio.create_task(blink())
+    # Check for OTA updates
+    repo_name = "GarageDeurOpener"
+    branch = "main"
+    firmware_url = f"https://github.com/Ian-Nendels/{repo_name}/{branch}/"
+    ota_updater = OTAUpdater(firmware_url, "main.py", "motor.py", "mqtt.py")
+    ota_updater.download_and_install_update_if_available()
+
+
     
     # Connect to MQTT broker, start MQTT client
     client.set_callback(mqtt.my_callback)
@@ -184,11 +197,11 @@ async def main():
                 logger.info('LOCAL4:Dagelijkse Reboot wordt nu uitgevoerd')
                 await asyncio.sleep(1)
                 machine.reset()
-        else:
-            await asyncio.sleep(1)
-            machine.reset()
             
         await asyncio.sleep(0.1)
         
 # Start event loop and run entry point coroutine
-asyncio.run(main())
+try:
+    asyncio.run(main())
+finally:
+    asyncio.new_event_loop()
