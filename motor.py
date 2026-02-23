@@ -9,13 +9,13 @@ encoderA = machine.Pin(4 , machine.Pin.IN)
 encoderB = machine.Pin(5 , machine.Pin.IN)
 
 class Garagedeur():
-    Richting       = 'stil'
-    RemoteDrukKnop = 'Neutraal'
-    MemDrukknop    = False
-    DichtSensor    = False
-    StartMotor     = False
-    Positie        = 0
-    VorigePositie  = 0
+    Richting : str       = 'stil'
+    RemoteDrukKnop : str = 'Neutraal'
+    MemDrukknop : bool   = False
+    DichtSensor : bool   = False
+    StartMotor : bool    = False
+    Positie : int        = 0
+    VorigePositie : int  = 0
 
 def ScaleOpening(input):
     factor = 210 / 878

@@ -3,6 +3,7 @@ import uasyncio as asyncio
 import time
 from lib import usyslog
 from lib import queue
+from lib import ntp
 from lib import WiFi
 from lib.WiFi import Network
 from lib.simple import MQTTClient
@@ -10,7 +11,6 @@ from lib.ota import OTAUpdater
 import mqtt
 from mqtt import config, WatchDogData, ping, mqttServer, RemoteButtonPress
 from motor import Garagedeur, UpdatePosition, MotorDirection, OmDraaien, Encoder
-import ntp
 
 TimeArray = [ 2025, 1, 1, 0, 0, 0, 0, 0 ] 
 # I/O punten Pico W
@@ -95,7 +95,7 @@ async def DeurSensorChange():
         try:
             while ((Garagedeur.DichtSensor == deursensor.value()) or StartUp):
                 await asyncio.sleep(0.05)
-            Garagedeur.DichtSensor = deursensor.value()
+            Garagedeur.DichtSensor = bool(deursensor.value())
                 
             logmsg = "GarageDeur dicht = " + str(Garagedeur.DichtSensor)
             print(logmsg)

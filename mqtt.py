@@ -1,9 +1,10 @@
 import uasyncio as asyncio
+from lib import usyslog
 from lib.WiFi import Network
 import json
 from time import sleep
-import usyslog
 import motor
+from CONFIG import MqttConfig
 
 # Constants for MQTT Topics
 MQTT_TOPIC_BUTTON = 'domoticz/out/GarageDeurOpener'
@@ -28,16 +29,16 @@ class ping():
     
 class config():
     # MQTT Parameters
-    MQTT_SERVER = b'192.168.178.20'
+    MQTT_SERVER = MqttConfig.MQTT_SERVER
     MQTT_PORT = 1883
-    MQTT_USER = b'domoticz'
-    MQTT_PASSWORD = b'd0mot!cz'
+    MQTT_USER = MqttConfig.MQTT_USER
+    MQTT_PASSWORD = MqttConfig.MQTT_PASSWORD
     MQTT_CLIENT_ID = b"pico_garage"
     MQTT_KEEPALIVE = 120
     MQTT_SSL = False   # set to False if using local Mosquitto MQTT broker
     MQTT_SSL_PARAMS = {'server_hostname': MQTT_SERVER}
     MQTT_PING_INTERVAL = 60
-    SYSLOG_SERVER_IP = '192.168.178.20'
+    SYSLOG_SERVER_IP = MqttConfig.SYSLOG_SERVER_IP
 
 logger = usyslog.UDPClient(ip=config.SYSLOG_SERVER_IP, facility=usyslog.F_LOCAL4)
 
@@ -116,7 +117,7 @@ async def ping_mqtt(client):
             if (ping.counter > 0):
                 interval = 5
                 msg = "ping interval op 5 sec, ping counter = " + str(ping.counter)
-                logger.warn('LOCAL4:' + msg)
+                logger.warning('LOCAL4:' + msg)
             else:
                 interval = config.MQTT_PING_INTERVAL
             if Network.wlan.isconnected():
@@ -148,7 +149,7 @@ async def check_mqtt_msg(client):
                     ping.started = False
                     if (ping.counter > 5):
                         mqttServer.isConnected = False
-                        logger.warn('LOCAL4:5x geen ping response, mqttServer disconnected')
+                        logger.warning('LOCAL4:5x geen ping response, mqttServer disconnected')
             await asyncio.sleep(0.1)
         except Exception as e:
             msg = "check_mqtt_msg loop error: {str(e)}"
