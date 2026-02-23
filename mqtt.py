@@ -74,23 +74,29 @@ async def subscribeWatchdog(client, topic):
         await asyncio.sleep(1)
 
 def my_callback(topic, message):
-    # Perform desired actions based on the subscribed topic and response
-    print('Received message on topic:', str(topic))
-    parsed = json.loads(message)
-    name = parsed["name"]
-    if name == 'GarageDeurOpener':
-        value = int(parsed["nvalue"])
-        if value == 1:
-            motor.Garagedeur.RemoteDrukKnop = 'Open'
-        if value == 0:
-            motor.Garagedeur.RemoteDrukKnop = 'Dicht'
-        msg = "Remote Drukknop = " + str(motor.Garagedeur.RemoteDrukKnop)
-        print(msg)
-        logger.info('LOCAL4:' + msg)
-    if name == 'GarageDeurWatchDogIn':
-        value = int(parsed["svalue1"])
-        WatchDogData.Read = value
-    sleep(0.1)
+    try:
+        # Perform desired actions based on the subscribed topic and response
+        print('Received message on topic:', str(topic))
+        parsed = json.loads(message)
+        name = parsed["name"]
+        if name == 'GarageDeurOpener':
+            value = int(parsed["nvalue"])
+            if value == 1:
+                motor.Garagedoor.RemotePushButton = 'Open'
+            if value == 0:
+                motor.Garagedoor.RemotePushButton = 'Close'
+            msg = "Remote PushButton = " + str(motor.Garagedoor.RemotePushButton)
+            print(msg)
+            logger.info('LOCAL4:' + msg)
+        if name == 'GarageDeurWatchDogIn':
+            value = int(parsed["svalue1"])
+            WatchDogData.Read = value
+        sleep(0.1)
+    except Exception as e:
+        msg = "my_callback error: {str(e)}"
+        logger.error('LOCAL4:' + msg)
+        
+
 
 async def connect_mqtt(client):
     while True:
@@ -116,13 +122,12 @@ async def ping_mqtt(client):
                 ping.response = False
             if (ping.counter > 0):
                 interval = 5
-                msg = "ping interval op 5 sec, ping counter = " + str(ping.counter)
+                msg = "ping interval on 5 sec, ping counter = " + str(ping.counter)
                 logger.warning('LOCAL4:' + msg)
             else:
                 interval = config.MQTT_PING_INTERVAL
             if Network.wlan.isconnected():
                 if ping.FirstRun:
-                    #print("Sending Ping Request")
                     client.ping()
                     ping.started = True
                     ping.counter += 1
@@ -149,7 +154,7 @@ async def check_mqtt_msg(client):
                     ping.started = False
                     if (ping.counter > 5):
                         mqttServer.isConnected = False
-                        logger.warning('LOCAL4:5x geen ping response, mqttServer disconnected')
+                        logger.warning('LOCAL4:5x no ping response, mqttServer disconnected')
             await asyncio.sleep(0.1)
         except Exception as e:
             msg = "check_mqtt_msg loop error: {str(e)}"
@@ -161,20 +166,20 @@ async def check_mqtt_msg(client):
 #CoRoutine: Waiting for RemoteButton coming from mqtt
 async def RemoteButtonPress():
     while True:
-        while (motor.Garagedeur.RemoteDrukKnop == 'Neutraal'):
+        while (motor.Garagedoor.RemotePushButton == 'Neutral'):
             await asyncio.sleep(0.1)
-        if motor.Garagedeur.Richting != 'stil':
-            if (motor.Garagedeur.RemoteDrukKnop == 'Dicht' and motor.Garagedeur.Richting == 'omlaag') or (motor.Garagedeur.RemoteDrukKnop == 'Open' and motor.Garagedeur.Richting == 'omhoog'):
-                motor.Garagedeur.StartMotor = True
+        if motor.Garagedoor.Direction != 'stopped':
+            if (motor.Garagedoor.RemotePushButton == 'Close' and motor.Garagedoor.Direction == 'down') or (motor.Garagedoor.RemotePushButton == 'Open' and motor.Garagedoor.Direction == 'up'):
+                motor.Garagedoor.StartMotor = True
                 print("Remote Button Pressed to stop Motor")
                 await asyncio.sleep(1)
         else:
-            if (motor.Garagedeur.RemoteDrukKnop == 'Dicht' and motor.Garagedeur.DichtSensor == True) or (motor.Garagedeur.RemoteDrukKnop == 'Open' and not motor.Garagedeur.Positie > 870):
-                motor.Garagedeur.StartMotor = True
+            if (motor.Garagedoor.RemotePushButton == 'Close' and motor.Garagedoor.ClosedSensor == True) or (motor.Garagedoor.RemotePushButton == 'Open' and not motor.Garagedoor.Position > 870):
+                motor.Garagedoor.StartMotor = True
                 print("Remote Button Pressed")
                 await asyncio.sleep(1)
             else:
-                motor.Garagedeur.RemoteDrukKnop = 'Neutraal'
-        while motor.Garagedeur.RemoteDrukKnop != 'Neutraal':
+                motor.Garagedoor.RemotePushButton = 'Neutral'
+        while motor.Garagedoor.RemotePushButton != 'Neutral':
             await asyncio.sleep(1)
         await asyncio.sleep(0.1)

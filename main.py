@@ -2,7 +2,6 @@ import machine
 import uasyncio as asyncio
 import time
 from lib import usyslog
-from lib import queue
 from lib import ntp
 from lib import WiFi
 from lib.WiFi import Network
@@ -10,12 +9,14 @@ from lib.simple import MQTTClient
 from lib.ota import OTAUpdater
 import mqtt
 from mqtt import config, WatchDogData, ping, mqttServer, RemoteButtonPress
-from motor import Garagedeur, UpdatePosition, MotorDirection, OmDraaien, Encoder
+from motor import Garagedoor, UpdatePosition, MotorDirection, TurnAround, Encoder
 
+StartUp = True
 TimeArray = [ 2025, 1, 1, 0, 0, 0, 0, 0 ] 
-# I/O punten Pico W
+
+# I/O points Pico W
 button     = machine.Pin(2 , machine.Pin.IN)
-deursensor = machine.Pin(3 , machine.Pin.IN)
+doorsensor = machine.Pin(3 , machine.Pin.IN)
 hormann    = machine.Pin(16, machine.Pin.OUT, value=1)
 led        = machine.Pin("LED", machine.Pin.OUT)
 
@@ -29,30 +30,17 @@ client = MQTTClient(client_id=config.MQTT_CLIENT_ID,
                           ssl=config.MQTT_SSL,
                    ssl_params=config.MQTT_SSL_PARAMS)
 
-#logger = Logger("debug", "logfile.log")
+# Initialise connection to syslog server
 logger = usyslog.UDPClient(ip=config.SYSLOG_SERVER_IP, facility=usyslog.F_LOCAL4)
-
-StartUp = True
-
-#CoRoutine: blink LED on a timer
-async def blink():
-    delay_ms = 100
-    while True:
-        if (False):    
-            # Toggle Led State
-            led.toggle()
-        else:
-            led.off()
-        await asyncio.sleep_ms(delay_ms)
 
 #CoRoutine: Watchdog with Domoticz
 async def WatchDog():
     while True:
         try:
-            await asyncio.sleep(60)
+            await asyncio.sleep(60) # Watchdog interval = 1 minute
             if WatchDogData.Read == WatchDogData.Send:
                 if WatchDogData.FaultCounter > 0:
-                    msg = "Watchdog weer OKE"
+                    msg = "Watchdog connection is alive"
                     logger.info('LOCAL4:' + msg)
                     WatchDogData.FaultCounter = 0
                 
@@ -67,11 +55,10 @@ async def WatchDog():
                 msg = mqtt.CreateDomoticzValue(1955, WatchDogData.Send)
                 client.publish(mqtt.MQTT_TOPIC_IN, msg)
             if WatchDogData.FaultCounter > 4:
-                logger.info('LOCAL4:Reboot door WatchDog error')
+                logger.info('LOCAL4:Reboot caused by WatchDog error')
                 await asyncio.sleep(1)
                 machine.reset()
         
-            #print("Read: ", WatchDogData.Read, " Send: ", WatchDogData.Send)
         except Exception as e:
             msg = "WatchDog loop error: {str(e)}"
             logger.error('LOCAL4:' + msg)
@@ -80,53 +67,52 @@ async def WatchDog():
 #CoRoutine: Waiting for Button 
 async def ButtonPress():
     while True:
-        Garagedeur.MemDrukknop = bool(button.value())
-        while (Garagedeur.MemDrukknop == bool(button.value()) or StartUp):
+        Garagedoor.MemPushButton = bool(button.value())
+        while (Garagedoor.MemPushButton == bool(button.value()) or StartUp):
             await asyncio.sleep(0.05)
-        Garagedeur.MemDrukknop = bool(button.value())
+        Garagedoor.MemPushButton = bool(button.value())
         if not bool(button.value()):
-            Garagedeur.StartMotor = True
+            Garagedoor.StartMotor = True
             print("Button Pressed")
         await asyncio.sleep(0.1)
 
-#coroutine: Waiting for DeurSensor
-async def DeurSensorChange():
+#coroutine: Waiting for DoorSensor
+async def DoorSensorChange():
     while True:
         try:
-            while ((Garagedeur.DichtSensor == deursensor.value()) or StartUp):
+            while ((Garagedoor.ClosedSensor == doorsensor.value()) or StartUp):
                 await asyncio.sleep(0.05)
-            Garagedeur.DichtSensor = bool(deursensor.value())
+            Garagedoor.ClosedSensor = bool(doorsensor.value())
                 
-            logmsg = "GarageDeur dicht = " + str(Garagedeur.DichtSensor)
+            logmsg = "GarageDoor closed = " + str(Garagedoor.ClosedSensor)
             print(logmsg)
             logger.info('LOCAL4:' + logmsg)
-            if Garagedeur.DichtSensor:
+            if Garagedoor.ClosedSensor:
                 msg = mqtt.CreateDomoticzString(1742, 1)
                 await asyncio.sleep(1)
             else:
                 msg = mqtt.CreateDomoticzString(1742, 0)
-                while Garagedeur.Richting != 'stil':
+                while Garagedoor.Direction != 'stil':
                     await asyncio.sleep(0.1)
-                Garagedeur.Positie = 0
+                Garagedoor.Position = 0
             client.publish(mqtt.MQTT_TOPIC_IN, msg)
             print("Publish: ", msg)
             await asyncio.sleep(1)
         except Exception as e:
-            msg = "DeurSensorChange loop error: {str(e)}"
+            msg = "DoorSensorChange loop error: {str(e)}"
             logger.error('LOCAL4:' + msg)
             await asyncio.sleep(1)
         
 async def StartHormann():
     while True:
-        while not Garagedeur.StartMotor or not Network.wlan.isconnected():
+        while not Garagedoor.StartMotor or not Network.wlan.isconnected():
             await asyncio.sleep(0.05)
         if not StartUp:
             hormann.value(0)
-            #MotorData.StartPuls = True
-            await asyncio.sleep(1)
+            await asyncio.sleep(1) # Door is started and stopped by a puls command
             hormann.value(1)
-            logger.info('LOCAL4:DeurCommando geschakeld')
-        Garagedeur.StartMotor = False
+            logger.info('LOCAL4:DoorCommand activated')
+        Garagedoor.StartMotor = False
         await asyncio.sleep(0.1)
 
 #CoRoutine: entry point for asyncio program
@@ -140,13 +126,13 @@ async def main():
     while not Network.wlan.isconnected():
         await asyncio.sleep(1)
         
-    logger.info('LOCAL4:Garagdeur opener wordt opgestart.')
+    logger.info('LOCAL4:Garagedoor opener Started.')
     # Sync Hardware Clock with NTP
     ntp.set_time()
     TimeArray = time.localtime()
     LocalTime = '{:02d}'.format(TimeArray[3]) + ":" + '{:02d}'.format(TimeArray[4]) + ":" + '{:02d}'.format(TimeArray[5])
-    print('Lokale tijd = ' + LocalTime)
-    logger.info('LOCAL4:Lokale tijd = ' + LocalTime)
+    print('Local time = ' + LocalTime)
+    logger.info('LOCAL4:Local time = ' + LocalTime)
    
     # Check for OTA updates
     repo_name = "GarageDeurOpener"
@@ -169,11 +155,11 @@ async def main():
     if Network.wlan.isconnected():
         asyncio.create_task(mqtt.check_mqtt_msg(client))
         asyncio.create_task(WatchDog())
-        asyncio.create_task(DeurSensorChange())
+        asyncio.create_task(DoorSensorChange())
         asyncio.create_task(ButtonPress())
         asyncio.create_task(RemoteButtonPress())
         asyncio.create_task(StartHormann())
-        asyncio.create_task(OmDraaien(logger))
+        asyncio.create_task(TurnAround(logger))
         asyncio.create_task(MotorDirection(client, mqtt.MQTT_TOPIC_IN))
         asyncio.create_task(UpdatePosition(client, mqtt.MQTT_TOPIC_IN))
         asyncio.create_task(Encoder())
@@ -187,14 +173,14 @@ async def main():
             StartUp = False
 
         if Network.wlan.isconnected() and mqttServer.isConnected:
-            if (Garagedeur.Richting =='omhoog' and Garagedeur.RemoteDrukKnop == 'Open') or (Garagedeur.Richting =='omlaag' and Garagedeur.RemoteDrukKnop == 'Dicht'):
+            if (Garagedoor.Direction =='up' and Garagedoor.RemotePushButton == 'Open') or (Garagedoor.Direction =='down' and Garagedoor.RemotePushButton == 'Close'):
                 await asyncio.sleep(1)
-                Garagedeur.RemoteDrukKnop = 'Neutraal'
-                print('DeurCommando weer Neutraal')
+                Garagedoor.RemotePushButton = 'Neutral'
+                print('DoorCommand is Neutral')
 
             # Dagelijkse reboot om 02:30:00 uur
             if TimeArray[3] == 2 and TimeArray[4] == 30 and TimeArray[5] == 0:
-                logger.info('LOCAL4:Dagelijkse Reboot wordt nu uitgevoerd')
+                logger.info('LOCAL4:Daily reboot is handled now')
                 await asyncio.sleep(1)
                 machine.reset()
             
