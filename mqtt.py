@@ -3,8 +3,8 @@ from lib import usyslog
 from lib.WiFi import Network
 import json
 from time import sleep
-import motor
-from CONFIG import MqttConfig
+#import motor
+from CONF import MqttConfig
 
 # Constants for MQTT Topics
 MQTT_TOPIC_BUTTON = 'domoticz/out/GarageDeurOpener'
