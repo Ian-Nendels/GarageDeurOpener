@@ -115,6 +115,22 @@ async def StartHormann():
         Garagedoor.StartMotor = False
         await asyncio.sleep(0.1)
 
+def SyncTime():
+    # Sync Hardware Clock with NTP
+    ntp.set_time()
+    TimeArray = time.localtime()
+    LocalTime = '{:02d}'.format(TimeArray[3]) + ":" + '{:02d}'.format(TimeArray[4]) + ":" + '{:02d}'.format(TimeArray[5])
+    print('Local time = ' + LocalTime)
+    logger.info('LOCAL4:Local time = ' + LocalTime)
+
+def OtaUpdate():
+    # Check for OTA updates
+    repo_name = "GarageDeurOpener"
+    branch = "main"
+    firmware_url = f"https://github.com/Ian-Nendels/{repo_name}/{branch}/"
+    ota_updater = OTAUpdater(firmware_url, "main.py", "motor.py", "mqtt.py")
+    ota_updater.download_and_install_update_if_available()
+
 #CoRoutine: entry point for asyncio program
 async def main():
     ping.FirstRun = False
@@ -123,25 +139,12 @@ async def main():
         
     # Start coroutine Connect WiFi and immediatly return
     asyncio.create_task(WiFi.Connect_Wifi())
-    while not Network.wlan.isconnected():
+    while not Network.wlan.isconnected() or not Network.Connected:
         await asyncio.sleep(1)
-        
+    SyncTime()
+    OtaUpdate()
+    
     logger.info('LOCAL4:Garagedoor opener Started.')
-    # Sync Hardware Clock with NTP
-    ntp.set_time()
-    TimeArray = time.localtime()
-    LocalTime = '{:02d}'.format(TimeArray[3]) + ":" + '{:02d}'.format(TimeArray[4]) + ":" + '{:02d}'.format(TimeArray[5])
-    print('Local time = ' + LocalTime)
-    logger.info('LOCAL4:Local time = ' + LocalTime)
-   
-    # Check for OTA updates
-    repo_name = "GarageDeurOpener"
-    branch = "main"
-    firmware_url = f"https://github.com/Ian-Nendels/{repo_name}/{branch}/"
-    ota_updater = OTAUpdater(firmware_url, "main.py", "motor.py", "mqtt.py")
-    ota_updater.download_and_install_update_if_available()
-
-
     
     # Connect to MQTT broker, start MQTT client
     client.set_callback(mqtt.my_callback)
@@ -152,7 +155,7 @@ async def main():
    
     await asyncio.sleep(2)
     
-    if Network.wlan.isconnected():
+    if Network.wlan.isconnected() and Network.Connected:
         asyncio.create_task(mqtt.check_mqtt_msg(client))
         asyncio.create_task(WatchDog())
         asyncio.create_task(DoorSensorChange())
