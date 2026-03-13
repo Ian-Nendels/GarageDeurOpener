@@ -2,8 +2,9 @@ import machine
 import uasyncio as asyncio
 from lib import usyslog
 import mqtt
+from CONF import MqttConfig
 
-logger = usyslog.UDPClient(ip=mqtt.config.SYSLOG_SERVER_IP, facility=usyslog.F_LOCAL4)
+logger = usyslog.UDPClient(ip=MqttConfig.SYSLOG_SERVER_IP, facility=usyslog.F_LOCAL4)
 
 encoderA = machine.Pin(4 , machine.Pin.IN)
 encoderB = machine.Pin(5 , machine.Pin.IN)
@@ -90,5 +91,6 @@ async def TurnAround(logger):
             Garagedoor.StartMotor = True
             logger.info('LOCAL4:DoorCommand Turned')
         await asyncio.sleep(0.1)
+
 
 

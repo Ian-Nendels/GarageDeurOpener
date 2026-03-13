@@ -1,4 +1,5 @@
 import machine
+import _thread
 import uasyncio as asyncio
 import time
 from lib import usyslog
@@ -13,6 +14,9 @@ from motor import Garagedoor, UpdatePosition, MotorDirection, TurnAround, Encode
 
 StartUp = True
 TimeArray = [ 2025, 1, 1, 0, 0, 0, 0, 0 ] 
+
+WatchDogData.Read = 0
+WatchDogData.Send = 0
 
 # I/O points Pico W
 button     = machine.Pin(2 , machine.Pin.IN)
@@ -35,9 +39,21 @@ logger = usyslog.UDPClient(ip=config.SYSLOG_SERVER_IP, facility=usyslog.F_LOCAL4
 
 #CoRoutine: Watchdog with Domoticz
 async def WatchDog():
+    ErrorReset = 5
     while True:
         try:
+            while not Network.wlan.isconnected() or not Network.Connected:
+                await asyncio.sleep(1)
+            if (WatchDogData.FaultCounter == ErrorReset):
+                Network.Connected = False
+                msg = "Network Reset by WatchDog error"
+                print(msg)
+                logger.info('LOCAL4:' + msg)
+                WatchDogData.FaultCounter = 0
+                WatchDogData.Read = WatchDogData.Send
+                
             await asyncio.sleep(60) # Watchdog interval = 1 minute
+
             if WatchDogData.Read == WatchDogData.Send:
                 if WatchDogData.FaultCounter > 0:
                     msg = "Watchdog connection is alive"
@@ -54,16 +70,12 @@ async def WatchDog():
                 logger.info('LOCAL4:' + msg)
                 msg = mqtt.CreateDomoticzValue(1955, WatchDogData.Send)
                 client.publish(mqtt.MQTT_TOPIC_IN, msg)
-            if WatchDogData.FaultCounter > 4:
-                logger.info('LOCAL4:Reboot caused by WatchDog error')
-                await asyncio.sleep(1)
-                machine.reset()
-        
+                    
         except Exception as e:
-            msg = "WatchDog loop error: {str(e)}"
+            msg = "WatchDog loop error: " + str(e)
             logger.error('LOCAL4:' + msg)
             await asyncio.sleep(1)
-        
+         
 #CoRoutine: Waiting for Button 
 async def ButtonPress():
     while True:
@@ -99,7 +111,7 @@ async def DoorSensorChange():
             print("Publish: ", msg)
             await asyncio.sleep(1)
         except Exception as e:
-            msg = "DoorSensorChange loop error: {str(e)}"
+            msg = "DoorSensorChange loop error: " + str(e)
             logger.error('LOCAL4:' + msg)
             await asyncio.sleep(1)
         
@@ -131,10 +143,20 @@ def OtaUpdate():
     ota_updater = OTAUpdater(firmware_url, "main.py", "motor.py", "mqtt.py")
     ota_updater.download_and_install_update_if_available()
 
+def core1_task():
+    #Network.FirstRunDone = False
+    #WiFi.ConnectWiFi()
+    while not Network.wlan.isconnected() or not Network.Connected:
+        time.sleep(1)
+    #OtaUpdate()
+
+# Start the thread
+_thread.start_new_thread(core1_task, ())
+
 #CoRoutine: entry point for asyncio program
 async def main():
     ping.FirstRun = False
-    Network.FirstRun = False
+    Network.FirstRunDone = False
     print("Program Start")
         
     # Start coroutine Connect WiFi and immediatly return
@@ -142,8 +164,7 @@ async def main():
     while not Network.wlan.isconnected() or not Network.Connected:
         await asyncio.sleep(1)
     SyncTime()
-    OtaUpdate()
-    
+        
     logger.info('LOCAL4:Garagedoor opener Started.')
     
     # Connect to MQTT broker, start MQTT client
@@ -183,14 +204,16 @@ async def main():
 
             # Dagelijkse reboot om 02:30:00 uur
             if TimeArray[3] == 2 and TimeArray[4] == 30 and TimeArray[5] == 0:
-                logger.info('LOCAL4:Daily reboot is handled now')
+                logger.info('LOCAL4:Daily Watchdog Reset is handled now')
                 await asyncio.sleep(1)
-                machine.reset()
+                WatchDogData.Read = 0
+                WatchDogData.Send = 0
+            #    machine.reset()
             
         await asyncio.sleep(0.1)
         
 # Start event loop and run entry point coroutine
-try:
-    asyncio.run(main())
-finally:
-    asyncio.new_event_loop()
+#try:
+asyncio.run(main())
+#finally:
+#    asyncio.new_event_loop()

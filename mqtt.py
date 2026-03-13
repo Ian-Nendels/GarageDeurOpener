@@ -3,7 +3,7 @@ from lib import usyslog
 from lib.WiFi import Network
 import json
 from time import sleep
-#import motor
+import motor
 from CONF import MqttConfig
 
 # Constants for MQTT Topics
@@ -33,7 +33,7 @@ class config():
     MQTT_PORT = 1883
     MQTT_USER = MqttConfig.MQTT_USER
     MQTT_PASSWORD = MqttConfig.MQTT_PASSWORD
-    MQTT_CLIENT_ID = b"pico_garage"
+    MQTT_CLIENT_ID = b"pico_test_garage"
     MQTT_KEEPALIVE = 120
     MQTT_SSL = False   # set to False if using local Mosquitto MQTT broker
     MQTT_SSL_PARAMS = {'server_hostname': MQTT_SERVER}
@@ -93,7 +93,7 @@ def my_callback(topic, message):
             WatchDogData.Read = value
         sleep(0.1)
     except Exception as e:
-        msg = "my_callback error: {str(e)}"
+        msg = "my_callback error: " + str(e)
         logger.error('LOCAL4:' + msg)
         
 
@@ -102,8 +102,10 @@ async def connect_mqtt(client):
     while True:
         try:
             while mqttServer.isConnected:
+                if not Network.Connected and mqttServer.isConnected:
+                    mqttServer.isConnected = False
                 await asyncio.sleep(0.1)
-            if Network.wlan.isconnected():
+            if Network.wlan.isconnected() and Network.Connected:
                 print("Connect to MQTT Server")
                 logger.info('LOCAL4:Connect to MQTT Server')
                 res = client.connect()
@@ -111,8 +113,9 @@ async def connect_mqtt(client):
                 mqttServer.SubscribeWD = True
             await asyncio.sleep(1)
         except Exception as e:
-            msg = "connect_mqtt loop error: {str(e)}"
+            msg = "connect_mqtt loop error: " + str(e)
             logger.error('LOCAL4:' + msg)
+            Network.Connected = False
             await asyncio.sleep(1)
 
 async def ping_mqtt(client):
@@ -136,8 +139,9 @@ async def ping_mqtt(client):
                     ping.response = True
             await asyncio.sleep(interval)
         except Exception as e:
-            msg = "ping_mqtt loop error: {str(e)}"
+            msg = "ping_mqtt loop error: " + str(e)
             logger.error('LOCAL4:' + msg)
+            Network.Connected = False
             await asyncio.sleep(2)
 
 
@@ -153,12 +157,13 @@ async def check_mqtt_msg(client):
                 if ping.started:
                     ping.started = False
                     if (ping.counter > 5):
-                        mqttServer.isConnected = False
-                        logger.warning('LOCAL4:5x no ping response, mqttServer disconnected')
+                        Network.Connected = False
+                        logger.warning('LOCAL4:5x no ping response, mqttServer disconnected, Restart Network')
             await asyncio.sleep(0.1)
         except Exception as e:
-            msg = "check_mqtt_msg loop error: {str(e)}"
+            msg = "check_mqtt_msg loop error: " + str(e)
             logger.error('LOCAL4:' + msg)
+            Network.Connected = False
             await asyncio.sleep(2)
 
 
