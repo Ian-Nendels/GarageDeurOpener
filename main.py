@@ -104,7 +104,7 @@ async def DoorSensorChange():
                 await asyncio.sleep(1)
             else:
                 msg = mqtt.CreateDomoticzString(1742, 0)
-                while Garagedoor.Direction != 'stil':
+                while Garagedoor.Direction != 'stopped':
                     await asyncio.sleep(0.1)
                 Garagedoor.Position = 0
             client.publish(mqtt.MQTT_TOPIC_IN, msg)
@@ -117,7 +117,7 @@ async def DoorSensorChange():
         
 async def StartHormann():
     while True:
-        while not Garagedoor.StartMotor or not Network.wlan.isconnected():
+        while not Garagedoor.StartMotor:
             await asyncio.sleep(0.05)
         if not StartUp:
             hormann.value(0)
