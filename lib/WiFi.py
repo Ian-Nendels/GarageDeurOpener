@@ -1,18 +1,20 @@
 import uasyncio as asyncio
 import network
 from time import sleep
-from CONFIG import NetWorkConfig
+from CONF import NetWorkConfig
 
 class Network():
     wlan = network.WLAN()
-    FirstRun = False
-
+    FirstRunDone = False
+    Connected = False
+    
 #coroutine: Connect to WiFi
 async def Connect_Wifi():
     while True:
-        while Network.wlan.isconnected() and Network.FirstRun:
+        while Network.wlan.isconnected() and Network.Connected and Network.FirstRunDone:
             await asyncio.sleep(5)
-        if Network.FirstRun:
+        Network.Connected = False
+        if Network.FirstRunDone:
             print("Reconnecting...")
         status = await initialize_wifi(NetWorkConfig.wifi_ssid, NetWorkConfig.wifi_password)
         if not status:
@@ -20,10 +22,12 @@ async def Connect_Wifi():
             await asyncio.sleep(10)
         else:
             await asyncio.sleep(1)
-        Network.FirstRun = status
+        Network.FirstRunDone = status
 
 
 async def initialize_wifi(ssid, password):
+    Network.wlan.active(False)
+    asyncio.sleep(1)
     Network.wlan = network.WLAN(network.STA_IF)
     Network.wlan.active(True)
     Network.wlan.config(pm = 0xa11140) # Disable power-save mode
@@ -46,6 +50,10 @@ async def initialize_wifi(ssid, password):
     else:
         print('Connection successful!')
         network_info = Network.wlan.ifconfig()
-        print('IP address:', network_info[0])
+        print('IP address :', network_info[0])
+        print('NetMask    :', network_info[1])
+        print('Gateway    :', network_info[2])
+        print('DNS address:', network_info[3])
+        Network.Connected = True
         await asyncio.sleep(1)
         return True
