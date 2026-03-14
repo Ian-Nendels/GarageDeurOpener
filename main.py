@@ -211,12 +211,16 @@ async def main():
                 Garagedoor.RemotePushButton = 'Neutral'
                 print('DoorCommand is Neutral')
 
-            # Dagelijkse reboot om 02:30:00 uur
+            # Every 30 minutes check OTA
             if  (TimeArray[4] == 0 or TimeArray[4] == 30) and TimeArray[5] == 0:
                 logger.info('LOCAL4:periodic OTA update is handled now')
                 await asyncio.sleep(2)
                 OtaUpdate()
-            
+
+            # daily at 0:05 sync time
+            if  TimeArray[3] == 0 and TimeArray[4] == 5  and TimeArray[5] == 0:
+                SyncTime()
+
         await asyncio.sleep(0.1)
         
 # Start event loop and run entry point coroutine
