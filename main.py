@@ -152,7 +152,7 @@ def OtaUpdate():
         ota_updater = OTAUpdater(firmware_url, "main.py", "motor.py", "mqtt.py")
         ota_updater.download_and_install_update_if_available(logger)
         
-        firmware_url = f"https://github.com/Ian-Nendels/{repo_name}/{branch}/{lib}/"
+        firmware_url = f"https://github.com/Ian-Nendels/{repo_name}/{branch}/{subdir}/"
         ota_updater = OTAUpdater(firmware_url, "ota.py", "ntp.py", "WiFi.py")
         ota_updater.download_and_install_update_if_available(logger)
         
