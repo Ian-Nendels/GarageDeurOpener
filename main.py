@@ -133,7 +133,7 @@ async def StartHormann():
         Garagedoor.StartMotor = False
         await asyncio.sleep(0.1)
 
-async def SyncTime():
+def SyncTime():
     # Sync Hardware Clock with NTP
     ntp.set_time()
     TimeArray = time.localtime()
@@ -150,11 +150,10 @@ def OtaUpdate():
         subdir = "lib"
         firmware_url = f"https://github.com/Ian-Nendels/{repo_name}/{branch}/"
         ota_updater = OTAUpdater(firmware_url, "main.py", "motor.py", "mqtt.py")
-        ota_updater.download_and_install_update_if_available(logger)
-        
-        firmware_url = f"https://github.com/Ian-Nendels/{repo_name}/{branch}/{subdir}/"
-        ota_updater = OTAUpdater(firmware_url, "ota.py", "ntp.py", "WiFi.py")
-        ota_updater.download_and_install_update_if_available(logger)
+        if ota_updater.download_and_install_update_if_available(logger):
+            firmware_url = f"https://github.com/Ian-Nendels/{repo_name}/{branch}/{subdir}/"
+            ota_updater = OTAUpdater(firmware_url, "ota.py", "ntp.py", "WiFi.py")
+            ota_updater.download_and_install_update_if_available(logger)
         
     except Exception as e:
         msg = "OtaUpdate error: " + str(e)
