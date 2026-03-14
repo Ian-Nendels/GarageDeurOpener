@@ -211,8 +211,9 @@ async def main():
                 Garagedoor.RemotePushButton = 'Neutral'
                 print('DoorCommand is Neutral')
 
-            # Every 30 minutes check OTA
-            if  (TimeArray[4] == 0 or TimeArray[4] == 30) and TimeArray[5] == 0:
+            # Every 10 minutes check OTA
+            OtaTrigger = TimeArray[4] % 10
+            if OtaTrigger == 0 and TimeArray[5] == 0:
                 logger.info('LOCAL4:periodic OTA update is handled now')
                 await asyncio.sleep(2)
                 OtaUpdate()
