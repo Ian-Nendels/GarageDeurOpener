@@ -53,7 +53,9 @@ async def WatchDog():
                 WatchDogData.Read = WatchDogData.Send
                 
             await asyncio.sleep(60) # Watchdog interval = 1 minute
-
+            logmsg = f'WatchDogData.Send: {WatchDogData.Send} WatchDogData.Read: {WatchDogData.Read}'    
+            print(logmsg)
+            logger.info('LOCAL4:' + logmsg)
             if WatchDogData.Read == WatchDogData.Send:
                 if WatchDogData.FaultCounter > 0:
                     msg = "Watchdog connection is alive"
@@ -95,7 +97,7 @@ async def DoorSensorChange():
             while ((Garagedoor.ClosedSensor == doorsensor.value()) or StartUp):
                 await asyncio.sleep(0.05)
             Garagedoor.ClosedSensor = bool(doorsensor.value())
-                
+            TimeOut = 0    
             logmsg = "GarageDoor closed = " + str(Garagedoor.ClosedSensor)
             print(logmsg)
             logger.info('LOCAL4:' + logmsg)
@@ -104,8 +106,12 @@ async def DoorSensorChange():
                 await asyncio.sleep(1)
             else:
                 msg = mqtt.CreateDomoticzString(1742, 0)
-                while Garagedoor.Direction != 'stopped':
+                while Garagedoor.Direction != 'stopped' or TimeOut > 100:
+                    TimeOut += 1
                     await asyncio.sleep(0.1)
+                if TimeOut > 100:
+                    logmsg = "TimeOut reached because Garagedoor direction = " + Garagedoor.Direction
+                    logger.warning('LOCAL4:' + logmsg)
                 Garagedoor.Position = 0
             client.publish(mqtt.MQTT_TOPIC_IN, msg)
             print("Publish: ", msg)
@@ -136,19 +142,22 @@ def SyncTime():
     logger.info('LOCAL4:Local time = ' + LocalTime)
 
 def OtaUpdate():
-    # Check for OTA updates
-    repo_name = "GarageDeurOpener"
-    branch = "main"
-    firmware_url = f"https://github.com/Ian-Nendels/{repo_name}/{branch}/"
-    ota_updater = OTAUpdater(firmware_url, "main.py", "motor.py", "mqtt.py")
-    ota_updater.download_and_install_update_if_available()
+    try:
+        logger.info('LOCAL4:OTA Update Started.')
+        # Check for OTA updates
+        repo_name = "GarageDeurOpener"
+        branch = "main"
+        firmware_url = f"https://github.com/Ian-Nendels/{repo_name}/{branch}/"
+        ota_updater = OTAUpdater(firmware_url, "main.py", "motor.py", "mqtt.py")
+        ota_updater.download_and_install_update_if_available(logger)
+    except Exception as e:
+        msg = "OtaUpdate error: " + str(e)
+        logger.error('LOCAL4:' + msg)
 
 def core1_task():
-    #Network.FirstRunDone = False
-    #WiFi.ConnectWiFi()
     while not Network.wlan.isconnected() or not Network.Connected:
         time.sleep(1)
-    #OtaUpdate()
+    OtaUpdate()
 
 # Start the thread
 _thread.start_new_thread(core1_task, ())
@@ -169,23 +178,23 @@ async def main():
     
     # Connect to MQTT broker, start MQTT client
     client.set_callback(mqtt.my_callback)
-    asyncio.create_task(mqtt.connect_mqtt(client))
-    asyncio.create_task(mqtt.ping_mqtt(client))
-    asyncio.create_task(mqtt.subscribeButton(client, mqtt.MQTT_TOPIC_BUTTON))
-    asyncio.create_task(mqtt.subscribeWatchdog(client, mqtt.MQTT_TOPIC_WATCHDOG))
+    asyncio.create_task(mqtt.connect_mqtt(logger, Network, client))
+    asyncio.create_task(mqtt.ping_mqtt(logger, Network, client))
+    asyncio.create_task(mqtt.subscribeButton(logger, client, mqtt.MQTT_TOPIC_BUTTON))
+    asyncio.create_task(mqtt.subscribeWatchdog(logger, client, mqtt.MQTT_TOPIC_WATCHDOG))
    
     await asyncio.sleep(2)
     
     if Network.wlan.isconnected() and Network.Connected:
-        asyncio.create_task(mqtt.check_mqtt_msg(client))
+        asyncio.create_task(mqtt.check_mqtt_msg(logger, Network, client))
         asyncio.create_task(WatchDog())
         asyncio.create_task(DoorSensorChange())
         asyncio.create_task(ButtonPress())
-        asyncio.create_task(RemoteButtonPress())
+        asyncio.create_task(RemoteButtonPress(Garagedoor))
         asyncio.create_task(StartHormann())
         asyncio.create_task(TurnAround(logger))
-        asyncio.create_task(MotorDirection(client, mqtt.MQTT_TOPIC_IN))
-        asyncio.create_task(UpdatePosition(client, mqtt.MQTT_TOPIC_IN))
+        asyncio.create_task(MotorDirection(logger, mqtt, client, mqtt.MQTT_TOPIC_IN))
+        asyncio.create_task(UpdatePosition(logger, mqtt, client, mqtt.MQTT_TOPIC_IN))
         asyncio.create_task(Encoder())
         
     # Main loop
@@ -203,12 +212,10 @@ async def main():
                 print('DoorCommand is Neutral')
 
             # Dagelijkse reboot om 02:30:00 uur
-            if TimeArray[3] == 2 and TimeArray[4] == 30 and TimeArray[5] == 0:
-                logger.info('LOCAL4:Daily Watchdog Reset is handled now')
-                await asyncio.sleep(1)
-                WatchDogData.Read = 0
-                WatchDogData.Send = 0
-            #    machine.reset()
+            if  (TimeArray[4] == 0 or TimeArray[4] == 30) and TimeArray[5] == 0:
+                logger.info('LOCAL4:periodic OTA update is handled now')
+                await asyncio.sleep(2)
+                OtaUpdate()
             
         await asyncio.sleep(0.1)
         

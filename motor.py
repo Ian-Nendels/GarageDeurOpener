@@ -1,10 +1,6 @@
 import machine
 import uasyncio as asyncio
-from lib import usyslog
-import mqtt
 from CONF import MqttConfig
-
-logger = usyslog.UDPClient(ip=MqttConfig.SYSLOG_SERVER_IP, facility=usyslog.F_LOCAL4)
 
 encoderA = machine.Pin(4 , machine.Pin.IN)
 encoderB = machine.Pin(5 , machine.Pin.IN)
@@ -37,7 +33,7 @@ async def Encoder():
             await asyncio.sleep(0.001)
         MemPuls = bool(encoderA.value())
 
-async def MotorDirection(client, Topic):
+async def MotorDirection(logger, mqtt, client, Topic):
     lasttime = True
     while True:
         try:
@@ -66,7 +62,7 @@ async def MotorDirection(client, Topic):
 
 
 # Send periodic the doorposition to Domoticz
-async def UpdatePosition(client, Topic):
+async def UpdatePosition(logger, mqtt, client, Topic):
     while True:
         try:
             await asyncio.sleep(300)
