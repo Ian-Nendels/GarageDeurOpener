@@ -133,7 +133,7 @@ async def StartHormann():
         Garagedoor.StartMotor = False
         await asyncio.sleep(0.1)
 
-def SyncTime():
+async def SyncTime():
     # Sync Hardware Clock with NTP
     ntp.set_time()
     TimeArray = time.localtime()
