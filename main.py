@@ -220,6 +220,7 @@ async def main():
             # daily at 0:05 sync time
             if  TimeArray[3] == 0 and TimeArray[4] == 5  and TimeArray[5] == 0:
                 SyncTime()
+                await asyncio.sleep(1)
 
         await asyncio.sleep(0.1)
         
