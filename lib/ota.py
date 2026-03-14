@@ -106,18 +106,19 @@ class OTAUpdater:
                 logger.info('LOCAL4:' + logmsg)
 
             # save the current version
-            with open('version.json', 'w') as f:
-                json.dump({'version': self.latest_version}, f)
-            logmsg = 'Update version from {self.current_version} to {self.latest_version}'
-            print(logmsg)
-            logger.info('LOCAL4:' + logmsg)
+            if self.repo_url.endswith("lib/"):
+                with open('version.json', 'w') as f:
+                    json.dump({'version': self.latest_version}, f)
+                logmsg = f'Update version from {self.current_version} to {self.latest_version}'
+                print(logmsg)
+                logger.info('LOCAL4:' + logmsg)
 
-            # Restart the device to run the new code.
-            logmsg = 'Restarting device...'
-            print(logmsg)
-            logger.info('LOCAL4:' + logmsg)
-            sleep(0.3)
-            machine.reset() 
+                # Restart the device to run the new code.
+                logmsg = 'Restarting device...'
+                print(logmsg)
+                logger.info('LOCAL4:' + logmsg)
+                sleep(0.3)
+                machine.reset() 
         else:
             logmsg = 'No new updates available.'
             print(logmsg)
