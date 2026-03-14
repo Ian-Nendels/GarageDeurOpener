@@ -148,7 +148,7 @@ def OtaUpdate():
         repo_name = "GarageDeurOpener"
         branch = "main"
         firmware_url = f"https://github.com/Ian-Nendels/{repo_name}/{branch}/"
-        ota_updater = OTAUpdater(firmware_url, "main.py", "motor.py", "mqtt.py", "lib/ntp.py")
+        ota_updater = OTAUpdater(firmware_url, "main.py", "motor.py", "mqtt.py")
         ota_updater.download_and_install_update_if_available(logger)
     except Exception as e:
         msg = "OtaUpdate error: " + str(e)
