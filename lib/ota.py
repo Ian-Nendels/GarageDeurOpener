@@ -4,7 +4,6 @@ import json
 import machine
 from time import sleep
 from lib import usyslog
-from mqtt import config
 
 class OTAUpdater:
     """ This class handles OTA updates. It checks for updates (using version number),
@@ -12,8 +11,6 @@ class OTAUpdater:
 
     def __init__(self, repo_url, *filenames):
         
-        # Initialise connection to syslog server
-        logger = usyslog.UDPClient(ip=config.SYSLOG_SERVER_IP, facility=usyslog.F_LOCAL4)
         
         if "www.github.com" in repo_url :
             #print(f"Updating {repo_url} to raw.githubusercontent")
@@ -121,8 +118,10 @@ class OTAUpdater:
                 print(logmsg)
                 logger.info('LOCAL4:' + logmsg)
                 sleep(0.3)
-                machine.reset() 
+                machine.reset()
+            return True
         else:
             logmsg = 'No new updates available.'
             print(logmsg)
             logger.info('LOCAL4:' + logmsg)
+            return False
